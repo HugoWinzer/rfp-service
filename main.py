@@ -10,7 +10,7 @@ def health():
     return "OK", 200
 
 # Load FAISS index
-with open("faiss_index/index.pkl","rb") as f:
+with open("faiss_index/index.pkl", "rb") as f:
     faiss_index = pickle.load(f)
 
 # Read the OpenAI key
@@ -24,7 +24,7 @@ def start():
         doc_id   = data["doc_id"]
 
         # Auto-detect first sheet tab
-        sheets_svc = build("sheets","v4").spreadsheets()
+        sheets_svc = build("sheets", "v4").spreadsheets()
         meta = sheets_svc.get(
             spreadsheetId=sheet_id,
             fields="sheets(properties(title))"
@@ -43,10 +43,10 @@ def start():
         print(f"Fetched {len(rows)} rows")
 
         # Enrich and append to Google Doc
-        docs_svc = build("docs","v1").documents()
+        docs_svc = build("docs", "v1").documents()
         for idx, row in enumerate(rows, start=2):
             req = row[0]
-            fnc = row[1] if len(row)>1 else ""
+            fnc = row[1] if len(row) > 1 else ""
             prompt = (
                 f"You are Fever’s RFP AI assistant.\n"
                 f"Requirement: {req}\nFunctionality: {fnc}\n"
@@ -60,17 +60,21 @@ def start():
             enriched = ai_resp.choices[0].text.strip()
             docs_svc.batchUpdate(
                 documentId=doc_id,
-                body={"requests":[{"insertText":{
-                    "endOfSegmentLocation":{}, "text": enriched+"\n\n"
-                }}]}
+                body={"requests": [{
+                    "insertText": {
+                        "endOfSegmentLocation": {},
+                        "text": enriched + "\n\n"
+                    }
+                }]}
             ).execute()
             print(f"Done row {idx}")
 
         return jsonify(status="complete", rows=len(rows)), 200
 
-    except Exception:
-        traceback.print_exc()
-        return jsonify(error="Internal error"), 500
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(tb)
+        return jsonify(error=str(e), traceback=tb), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
