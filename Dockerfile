@@ -6,7 +6,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app code + FAISS index + static UI
+# Copy code, FAISS index, and static UI
 COPY main.py .
 COPY faiss_index/ ./faiss_index/
 COPY static/ ./static/
