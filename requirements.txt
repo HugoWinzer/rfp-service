@@ -1,5 +1,5 @@
 Flask
 gunicorn
 google-api-python-client
-openai
 faiss-cpu
+openai==0.28.0
