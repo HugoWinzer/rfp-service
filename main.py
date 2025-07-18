@@ -8,16 +8,16 @@ from googleapiclient.discovery import build
 import openai
 import faiss
 
-# Serve the UI from ./static/index.html
+# Serve static/index.html at "/"
 app = Flask(__name__, static_folder="static", static_url_path="")
-
-@app.route("/health", methods=["GET"])
-def health():
-    return "OK", 200
 
 @app.route("/", methods=["GET"])
 def ui():
     return app.send_static_file("index.html")
+
+@app.route("/health", methods=["GET"])
+def health():
+    return "OK", 200
 
 # Load FAISS index once at startup
 with open("faiss_index/index.pkl", "rb") as f:
@@ -39,7 +39,7 @@ def start():
             spreadsheetId=sheet_id,
             fields="sheets(properties(title))"
         ).execute()
-        first_tab = meta["sheets"][0]["properties"]["title"]
+        first_tab   = meta["sheets"][0]["properties"]["title"]
         sheet_range = f"{first_tab}!A2:B"
         print("Using range:", sheet_range)
 
@@ -53,25 +53,19 @@ def start():
             return jsonify(error="No data in sheet!"), 400
         print(f"Fetched {len(rows)} rows")
 
-        # 3) Enrich each row with ChatCompletion and append to Doc
+        # 3) Enrich and append to the Doc
         docs_svc = build("docs", "v1").documents()
         for idx, row in enumerate(rows, start=2):
             requirement   = row[0]
             functionality = row[1] if len(row) > 1 else ""
-
-            # Prepare chat messages
             messages = [
                 {"role": "system", "content": "You are Fever’s RFP AI assistant."},
-                {
-                    "role": "user",
-                    "content":
-                        f"Requirement: {requirement}\n"
-                        f"Our functionality: {functionality}\n\n"
-                        "Write a narrative-rich paragraph explaining how this functionality meets the requirement."
+                {"role": "user", "content":
+                    f"Requirement: {requirement}\n"
+                    f"Our functionality: {functionality}\n\n"
+                    "Write a narrative-rich paragraph explaining how this functionality meets the requirement."
                 }
             ]
-
-            # Call the ChatCompletion endpoint
             ai_resp = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
@@ -79,27 +73,17 @@ def start():
             )
             enriched = ai_resp.choices[0].message.content.strip()
 
-            # Append the enriched text to the Google Doc
             docs_svc.batchUpdate(
                 documentId=doc_id,
-                body={
-                    "requests": [
-                        {
-                            "insertText": {
-                                "endOfSegmentLocation": {},
-                                "text": enriched + "\n\n"
-                            }
-                        }
-                    ]
-                }
+                body={"requests":[{"insertText":{
+                    "endOfSegmentLocation":{}, "text": enriched + "\n\n"
+                }}]}
             ).execute()
-
             print(f"Done row {idx}")
 
         return jsonify(status="complete", rows=len(rows)), 200
 
     except Exception as e:
-        # Capture & return full traceback
         tb = traceback.format_exc()
         print(tb)
         return jsonify(error=str(e), traceback=tb), 500
