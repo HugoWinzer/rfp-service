@@ -8,11 +8,16 @@ from googleapiclient.discovery import build
 import openai
 import faiss
 
-app = Flask(__name__)
+# Serve the UI from ./static/index.html
+app = Flask(__name__, static_folder="static", static_url_path="")
 
-@app.route("/", methods=["GET"])
+@app.route("/health", methods=["GET"])
 def health():
     return "OK", 200
+
+@app.route("/", methods=["GET"])
+def ui():
+    return app.send_static_file("index.html")
 
 # Load FAISS index once at startup
 with open("faiss_index/index.pkl", "rb") as f:
@@ -51,16 +56,18 @@ def start():
         # 3) Enrich each row with ChatCompletion and append to Doc
         docs_svc = build("docs", "v1").documents()
         for idx, row in enumerate(rows, start=2):
-            requirement = row[0]
+            requirement   = row[0]
             functionality = row[1] if len(row) > 1 else ""
 
             # Prepare chat messages
             messages = [
                 {"role": "system", "content": "You are Fever’s RFP AI assistant."},
-                {"role": "user",   "content":
-                    f"Requirement: {requirement}\n"
-                    f"Our functionality: {functionality}\n\n"
-                    "Write a narrative-rich paragraph explaining how this functionality meets the requirement."
+                {
+                    "role": "user",
+                    "content":
+                        f"Requirement: {requirement}\n"
+                        f"Our functionality: {functionality}\n\n"
+                        "Write a narrative-rich paragraph explaining how this functionality meets the requirement."
                 }
             ]
 
