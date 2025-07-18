@@ -9,24 +9,24 @@ import faiss
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
-# 1) UI at "/"
+# 1) Serve the UI at "/"
 @app.route("/", methods=["GET"])
 def ui():
     return send_from_directory("static", "index.html")
 
-# 2) Health at "/health"
+# 2) Health check at "/health"
 @app.route("/health", methods=["GET"])
 def health():
     return "OK", 200
 
-# 3) Load FAISS index
+# 3) Load FAISS index once at startup
 with open("faiss_index/index.pkl", "rb") as f:
     faiss_index = pickle.load(f)
 
-# 4) OpenAI key
+# 4) Configure OpenAI key from environment
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# 5) RFP generator
+# 5) RFP generation endpoint
 @app.route("/start", methods=["POST"])
 def start():
     try:
@@ -34,14 +34,16 @@ def start():
         sheet_id = data["sheet_id"]
         doc_id   = data["doc_id"]
 
+        # auto-detect the sheet tab
         sheets_svc = build("sheets", "v4").spreadsheets()
         meta = sheets_svc.get(
             spreadsheetId=sheet_id,
             fields="sheets(properties(title))"
         ).execute()
-        first_tab = meta["sheets"][0]["properties"]["title"]
+        first_tab   = meta["sheets"][0]["properties"]["title"]
         sheet_range = f"{first_tab}!A2:B"
 
+        # fetch rows
         resp = sheets_svc.values().get(
             spreadsheetId=sheet_id,
             range=sheet_range
@@ -50,18 +52,23 @@ def start():
         if not rows:
             return jsonify(error="No data in sheet!"), 400
 
+        # build & append into Google Doc
         docs_svc = build("docs", "v1").documents()
         for idx, row in enumerate(rows, start=2):
-            req = row[0]
-            fnc = row[1] if len(row)>1 else ""
+            requirement   = row[0]
+            functionality = row[1] if len(row) > 1 else ""
+
+            # chat prompt
             messages = [
-                {"role":"system","content":"You are Fever’s RFP AI assistant."},
-                {"role":"user","content":
-                    f"Requirement: {req}\n"
-                    f"Our functionality: {fnc}\n\n"
+                {"role": "system", "content": "You are Fever’s RFP AI assistant."},
+                {"role": "user", "content":
+                    f"Requirement: {requirement}\n"
+                    f"Our functionality: {functionality}\n\n"
                     "Write a narrative-rich paragraph explaining how this functionality meets the requirement."
                 }
             ]
+
+            # call ChatCompletion
             ai_resp = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
@@ -69,13 +76,16 @@ def start():
             )
             enriched = ai_resp.choices[0].message.content.strip()
 
+            # append to doc
             docs_svc.batchUpdate(
                 documentId=doc_id,
-                body={"requests":[
-                    {"insertText":{
-                        "endOfSegmentLocation":{},
-                        "text": enriched + "\n\n"
-                    }}
+                body={"requests": [
+                    {
+                        "insertText": {
+                            "endOfSegmentLocation": {},
+                            "text": enriched + "\n\n"
+                        }
+                    }
                 ]}
             ).execute()
 
@@ -86,4 +96,4 @@ def start():
         return jsonify(error=str(e), traceback=tb), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",8080)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
