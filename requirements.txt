@@ -1,0 +1,5 @@
+Flask
+gunicorn
+google-api-python-client
+openai
+faiss-cpu
