@@ -7,26 +7,26 @@ from googleapiclient.discovery import build
 import openai
 import faiss
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="static", static_url_path="")
 
-# 1) Serve the UI
+# 1) UI at "/"
 @app.route("/", methods=["GET"])
 def ui():
     return send_from_directory("static", "index.html")
 
-# 2) Health endpoint
+# 2) Health at "/health"
 @app.route("/health", methods=["GET"])
 def health():
     return "OK", 200
 
-# 3) Load FAISS index at startup
+# 3) Load FAISS index
 with open("faiss_index/index.pkl", "rb") as f:
     faiss_index = pickle.load(f)
 
-# 4) Configure OpenAI key
+# 4) OpenAI key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# 5) RFP generation endpoint
+# 5) RFP generator
 @app.route("/start", methods=["POST"])
 def start():
     try:
@@ -34,17 +34,14 @@ def start():
         sheet_id = data["sheet_id"]
         doc_id   = data["doc_id"]
 
-        # Auto-detect first tab name
         sheets_svc = build("sheets", "v4").spreadsheets()
         meta = sheets_svc.get(
             spreadsheetId=sheet_id,
             fields="sheets(properties(title))"
         ).execute()
-        first_tab   = meta["sheets"][0]["properties"]["title"]
+        first_tab = meta["sheets"][0]["properties"]["title"]
         sheet_range = f"{first_tab}!A2:B"
-        print("Using range:", sheet_range)
 
-        # Fetch rows
         resp = sheets_svc.values().get(
             spreadsheetId=sheet_id,
             range=sheet_range
@@ -52,14 +49,11 @@ def start():
         rows = resp.get("values", [])
         if not rows:
             return jsonify(error="No data in sheet!"), 400
-        print(f"Fetched {len(rows)} rows")
 
-        # Enrich & append
         docs_svc = build("docs", "v1").documents()
         for idx, row in enumerate(rows, start=2):
             req = row[0]
             fnc = row[1] if len(row)>1 else ""
-
             messages = [
                 {"role":"system","content":"You are Fever’s RFP AI assistant."},
                 {"role":"user","content":
@@ -84,13 +78,11 @@ def start():
                     }}
                 ]}
             ).execute()
-            print(f"Done row {idx}")
 
         return jsonify(status="complete", rows=len(rows)), 200
 
     except Exception as e:
         tb = traceback.format_exc()
-        print(tb)
         return jsonify(error=str(e), traceback=tb), 500
 
 if __name__ == "__main__":
