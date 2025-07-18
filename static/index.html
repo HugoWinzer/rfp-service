@@ -1,0 +1,47 @@
+mkdir static
+cat > static/index.html << 'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Fever RFP Generator</title>
+</head>
+<body>
+  <h1>Fever RFP Generator</h1>
+  <label>Google Sheet ID:<br/>
+    <input id="sheetId" size="60"/>
+  </label><br/><br/>
+  <label>Google Doc ID:<br/>
+    <input id="docId" size="60"/>
+  </label><br/><br/>
+  <button id="run">Generate RFP</button>
+  <pre id="output"></pre>
+
+  <script>
+    const svc = 'https://rfp-service-271222698808.us-central1.run.app/start';
+    document.getElementById('run').onclick = async () => {
+      const sheet_id = document.getElementById('sheetId').value.trim();
+      const doc_id   = document.getElementById('docId').value.trim();
+      document.getElementById('output').textContent = 'Running…';
+      try {
+        const resp = await fetch(svc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheet_id, doc_id })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          document.getElementById('output').textContent =
+            `✅ Done! Processed ${data.rows} rows.`;
+        } else {
+          document.getElementById('output').textContent =
+            `❌ Error: ${data.error}\n${data.traceback||''}`;
+        }
+      } catch (e) {
+        document.getElementById('output').textContent = `❌ Network: ${e}`;
+      }
+    };
+  </script>
+</body>
+</html>
+EOF
