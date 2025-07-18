@@ -1,7 +1,12 @@
-import os, pickle, traceback, json
+import os
+import pickle
+import traceback
+import json
+
 from flask import Flask, request, jsonify
 from googleapiclient.discovery import build
-import openai, faiss
+import openai
+import faiss
 
 app = Flask(__name__)
 
@@ -9,11 +14,11 @@ app = Flask(__name__)
 def health():
     return "OK", 200
 
-# Load FAISS index
+# Load FAISS index once at startup
 with open("faiss_index/index.pkl", "rb") as f:
     faiss_index = pickle.load(f)
 
-# Read the OpenAI key
+# Configure OpenAI key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/start", methods=["POST"])
@@ -23,58 +28,75 @@ def start():
         sheet_id = data["sheet_id"]
         doc_id   = data["doc_id"]
 
-        # Auto-detect first sheet tab
+        # 1) Auto-detect first sheet tab name
         sheets_svc = build("sheets", "v4").spreadsheets()
         meta = sheets_svc.get(
             spreadsheetId=sheet_id,
             fields="sheets(properties(title))"
         ).execute()
-        first_tab   = meta["sheets"][0]["properties"]["title"]
+        first_tab = meta["sheets"][0]["properties"]["title"]
         sheet_range = f"{first_tab}!A2:B"
         print("Using range:", sheet_range)
 
-        # Fetch rows
+        # 2) Fetch requirements + functionality rows
         resp = sheets_svc.values().get(
-            spreadsheetId=sheet_id, range=sheet_range
+            spreadsheetId=sheet_id,
+            range=sheet_range
         ).execute()
         rows = resp.get("values", [])
         if not rows:
             return jsonify(error="No data in sheet!"), 400
         print(f"Fetched {len(rows)} rows")
 
-        # Enrich and append to Google Doc
+        # 3) Enrich each row with ChatCompletion and append to Doc
         docs_svc = build("docs", "v1").documents()
         for idx, row in enumerate(rows, start=2):
-            req = row[0]
-            fnc = row[1] if len(row) > 1 else ""
-            prompt = (
-                f"You are Fever’s RFP AI assistant.\n"
-                f"Requirement: {req}\nFunctionality: {fnc}\n"
-                "Write a narrative-rich paragraph explaining how this functionality meets the requirement.\n"
-            )
-            ai_resp = openai.Completion.create(
-                model="text-davinci-003",
-                prompt=prompt,
+            requirement = row[0]
+            functionality = row[1] if len(row) > 1 else ""
+
+            # Prepare chat messages
+            messages = [
+                {"role": "system", "content": "You are Fever’s RFP AI assistant."},
+                {"role": "user",   "content":
+                    f"Requirement: {requirement}\n"
+                    f"Our functionality: {functionality}\n\n"
+                    "Write a narrative-rich paragraph explaining how this functionality meets the requirement."
+                }
+            ]
+
+            # Call the ChatCompletion endpoint
+            ai_resp = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
                 max_tokens=300
             )
-            enriched = ai_resp.choices[0].text.strip()
+            enriched = ai_resp.choices[0].message.content.strip()
+
+            # Append the enriched text to the Google Doc
             docs_svc.batchUpdate(
                 documentId=doc_id,
-                body={"requests": [{
-                    "insertText": {
-                        "endOfSegmentLocation": {},
-                        "text": enriched + "\n\n"
-                    }
-                }]}
+                body={
+                    "requests": [
+                        {
+                            "insertText": {
+                                "endOfSegmentLocation": {},
+                                "text": enriched + "\n\n"
+                            }
+                        }
+                    ]
+                }
             ).execute()
+
             print(f"Done row {idx}")
 
         return jsonify(status="complete", rows=len(rows)), 200
 
     except Exception as e:
+        # Capture & return full traceback
         tb = traceback.format_exc()
         print(tb)
         return jsonify(error=str(e), traceback=tb), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
