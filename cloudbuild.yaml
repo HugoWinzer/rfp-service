@@ -14,7 +14,7 @@ steps:
       - --timeout=60m
       - --allow-unauthenticated
       - --service-account=cb-deploy-sa@${PROJECT_ID}.iam.gserviceaccount.com
-      - --set-env-vars=OPENAI_API_KEY=${_OPENAI_API_KEY}
+      - --set-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest
 
 availableSecrets:
   secretManager:
