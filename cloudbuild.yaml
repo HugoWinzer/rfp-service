@@ -16,8 +16,5 @@ steps:
       - --service-account=cb-deploy-sa@${PROJECT_ID}.iam.gserviceaccount.com
       - --set-env-vars=OPENAI_API_KEY=${_OPENAI_API_KEY}
 
-options:
-  defaultLogsBucketBehavior: CLOUD_LOGGING_ONLY
-
 substitutions:
   _OPENAI_API_KEY: "your-openai-key-here"  # Replace this securely in your CI secret settings
