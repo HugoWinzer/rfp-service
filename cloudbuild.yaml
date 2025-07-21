@@ -16,5 +16,7 @@ steps:
       - --service-account=cb-deploy-sa@${PROJECT_ID}.iam.gserviceaccount.com
       - --set-env-vars=OPENAI_API_KEY=${_OPENAI_API_KEY}
 
-substitutions:
-  _OPENAI_API_KEY: "your-openai-key-here"
+availableSecrets:
+  secretManager:
+    - versionName: projects/$(PROJECT_ID)/secrets/OPENAI_API_KEY/versions/latest
+      env: OPENAI_API_KEY
