@@ -4,17 +4,18 @@ steps:
   - name: "gcr.io/cloud-builders/docker"
     args: ["push", "gcr.io/$PROJECT_ID/rfp-service:latest"]
   - name: "gcr.io/cloud-builders/gcloud"
+    entrypoint: "bash"
     args:
-      - run
-      - deploy
-      - rfp-service
-      - --image=gcr.io/$PROJECT_ID/rfp-service:latest
-      - --region=us-central1
-      - --platform=managed
-      - --timeout=60m
-      - --allow-unauthenticated
-      - --service-account=cb-deploy-sa@${PROJECT_ID}.iam.gserviceaccount.com
-      - --set-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest
+      - -c
+      - |
+        gcloud run deploy rfp-service \
+          --image=gcr.io/$PROJECT_ID/rfp-service:latest \
+          --region=us-central1 \
+          --platform=managed \
+          --timeout=60m \
+          --allow-unauthenticated \
+          --service-account=cb-deploy-sa@${PROJECT_ID}.iam.gserviceaccount.com \
+          --set-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest
 
 availableSecrets:
   secretManager:
