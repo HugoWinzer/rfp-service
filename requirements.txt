@@ -1,5 +1,7 @@
+# requirements.txt
 Flask
 gunicorn
 google-api-python-client
 faiss-cpu
 openai==0.28.0
+numpy
