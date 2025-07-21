@@ -1,14 +1,14 @@
 steps:
   - name: "gcr.io/cloud-builders/docker"
-    args: ["build", "-t", "gcr.io/$PROJECT_ID/rfp-service:$SHORT_SHA", "."]
+    args: ["build", "-t", "gcr.io/$PROJECT_ID/rfp-service:latest", "."]
   - name: "gcr.io/cloud-builders/docker"
-    args: ["push", "gcr.io/$PROJECT_ID/rfp-service:$SHORT_SHA"]
+    args: ["push", "gcr.io/$PROJECT_ID/rfp-service:latest"]
   - name: "gcr.io/cloud-builders/gcloud"
     args:
       - run
       - deploy
       - rfp-service
-      - --image=gcr.io/$PROJECT_ID/rfp-service:$SHORT_SHA
+      - --image=gcr.io/$PROJECT_ID/rfp-service:latest
       - --region=us-central1
       - --platform=managed
       - --timeout=60m
@@ -17,4 +17,4 @@ steps:
       - --set-env-vars=OPENAI_API_KEY=${_OPENAI_API_KEY}
 
 substitutions:
-  _OPENAI_API_KEY: "your-openai-key-here"  # Replace this securely in your CI secret settings
+  _OPENAI_API_KEY: "your-openai-key-here"
