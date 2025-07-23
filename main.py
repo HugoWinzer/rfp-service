@@ -1,4 +1,3 @@
-# main.py
 import os
 import pickle
 import numpy as np
@@ -46,7 +45,11 @@ def enrich_and_generate(user_input: str) -> str:
 
     # 3) Call ChatCompletion with retrieval context
     system_prompt = (
-        "Use the following context to help answer the user’s question:\n\n"
+        "You are an expert at writing responses for RFPs (Request for Proposals) for Fever, the leading ticketing and event platform. "
+        "Take the following context and create a proposal-ready, detailed, storytelling-rich answer based on the user requirement. "
+        "Make it engaging, professional, and tailored for business stakeholders. "
+        "Highlight Fever's strengths and the value delivered. Avoid repeating the context verbatim; synthesize and elaborate."
+        "\n\nContext:\n"
         f"{context_block}"
     )
     chat = openai.ChatCompletion.create(
@@ -105,9 +108,9 @@ def start_handler():
         user_text = row_vals[0] if row_vals else ""
         try:
             out = enrich_and_generate(user_text)
-            return (row_num, out)
+            return {"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""}
         except Exception as e:
-            return (row_num, f"fail: {e}")
+            return {"row": row_num, "input": user_text, "output": "", "status": "fail", "error": str(e)}
 
     tasks = [ (inputs[i], i + 2) for i in range(len(inputs)) ]
     with ThreadPoolExecutor(max_workers=5) as ex:
@@ -115,11 +118,11 @@ def start_handler():
 
     # 4) Batch-update all outputs back into the sheet
     data = []
-    for row_num, text in results:
+    for result in results:
         data.append({
-            "range": f"Sheet1!{col_letter}{row_num}",
+            "range": f"Sheet1!{col_letter}{result['row']}",
             "majorDimension": "ROWS",
-            "values": [[text]]
+            "values": [[result["output"]]]
         })
 
     sheets_service.spreadsheets().values().batchUpdate(
@@ -130,12 +133,13 @@ def start_handler():
         }
     ).execute()
 
-    success_count = sum(1 for _,t in results if not t.startswith("fail:"))
+    success_count = sum(1 for r in results if r["status"] == "success")
     fail_count    = len(results) - success_count
     return flask.jsonify({
         "total": len(results),
         "successes": success_count,
-        "failures": fail_count
+        "failures": fail_count,
+        "results": results  # detailed per-row log!
     })
 
 if __name__ == "__main__":
