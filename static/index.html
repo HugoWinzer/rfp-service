@@ -32,7 +32,34 @@
 </head>
 <body class="p-4">
   <div class="container">
-    <h1 class="mb-4">Batch GPT Enrichment for Sheets</h1>
+
+    <h1 class="mb-3">Batch GPT Enrichment for Sheets</h1>
+
+    <div class="alert alert-warning">
+      <h5>How to use:</h5>
+      <ol>
+        <li>
+          <b>Access this Google Sheet:</b>
+          <a href="https://docs.google.com/spreadsheets/d/1ZIC0CHQubuC9l_lJxbgDWM6e5IwNAd_ZR13UrigE7i0/edit?gid=1621118771#gid=1621118771"
+             target="_blank">
+             Fever RFP Template Sheet
+          </a>
+        </li>
+        <li>
+          <b>Create a new tab and call it <span class="text-primary">Sheet1</span></b> (it is case sensitive).
+        </li>
+        <li>
+          <b>Paste your info into 2 columns in <span class="text-primary">Sheet1</span>:</b>
+          <ul>
+            <li>Column <b>A</b>: RFP requirements</li>
+            <li>Column <b>B</b>: Arphie's output (Fever's functionalities)</li>
+          </ul>
+        </li>
+        <li>
+          <b>Click "Start Enrichment" below.</b> In about 60 seconds, a new column <b>"GPT Output"</b> will be added with story-like proposal text ready for your submission!
+        </li>
+      </ol>
+    </div>
 
     <form id="main-form">
       <div class="mb-3">
@@ -42,9 +69,10 @@
           class="form-control"
           id="sheet_id"
           name="sheet_id"
-          placeholder="e.g. 1AbC...XYZ"
-          required
+          value="1ZIC0CHQubuC9l_lJxbgDWM6e5IwNAd_ZR13UrigE7i0"
+          readonly
         >
+        <div class="form-text">This sheet ID is pre-filled and cannot be changed.</div>
       </div>
       <button type="submit" class="btn btn-primary">Start Enrichment</button>
     </form>
@@ -53,7 +81,7 @@
   </div>
 
   <script>
-    // Pepe GIFs, make sure the filenames match what's in your static/ folder!
+    // Pepe GIFs, make sure these filenames match your static/ folder!
     const pepeGifs = [
       "/static/pepe_dance.gif",
       "/static/pepedance.gif",
