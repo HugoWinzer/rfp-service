@@ -28,11 +28,20 @@
     .pepe-img:nth-child(5) { animation-delay: .8s; }
     .pepe-img:nth-child(6) { animation-delay: 1s; }
     .pepe-img:nth-child(7) { animation-delay: 1.2s; }
+    #password-container {
+      max-width: 350px;
+      margin: 100px auto 0 auto;
+      padding: 24px 24px 16px 24px;
+      border: 1px solid #ccc;
+      border-radius: 12px;
+      background: #f9fafb;
+      box-shadow: 0 2px 8px #0001;
+      text-align: center;
+    }
   </style>
 </head>
 <body class="p-4">
-  <div class="container">
-
+  <div class="container" id="main-content" style="display: none;">
     <h1 class="mb-3">Batch GPT Enrichment for Sheets</h1>
 
     <div class="alert alert-warning">
@@ -80,7 +89,46 @@
     <div id="result" class="mt-4"></div>
   </div>
 
+  <!-- Password overlay -->
+  <div id="password-container">
+    <h2 class="mb-3">Enter Access Password</h2>
+    <input type="password" id="password-input" class="form-control mb-2" placeholder="Password" autocomplete="off">
+    <button class="btn btn-primary w-100 mb-2" id="password-btn">Access</button>
+    <div id="password-error" class="text-danger mb-1" style="display:none;">Incorrect password. Try again.</div>
+    <div class="form-text">For Fever RFP team use only.</div>
+  </div>
+
   <script>
+    // Simple client-side password protection
+    const PASSWORD = "RFPTEAM";
+
+    function unlock() {
+      document.getElementById('password-container').style.display = 'none';
+      document.getElementById('main-content').style.display = '';
+      // store in session so user won't be asked again until they close tab
+      sessionStorage.setItem("rfp_pw", PASSWORD);
+    }
+
+    // On page load: check session
+    window.onload = function() {
+      if (sessionStorage.getItem("rfp_pw") === PASSWORD) {
+        unlock();
+      }
+    };
+
+    document.getElementById('password-btn').onclick = function(e) {
+      e.preventDefault();
+      const val = document.getElementById('password-input').value;
+      if (val === PASSWORD) {
+        unlock();
+      } else {
+        document.getElementById('password-error').style.display = '';
+      }
+    };
+    document.getElementById('password-input').addEventListener('keyup', function(e) {
+      if (e.key === "Enter") document.getElementById('password-btn').click();
+    });
+
     // Pepe GIFs, make sure these filenames match your static/ folder!
     const pepeGifs = [
       "/static/pepe_dance.gif",
