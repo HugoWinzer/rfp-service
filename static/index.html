@@ -48,12 +48,38 @@
           const data = await resp.json();
 
           if (resp.ok) {
+            let rowsHtml = "";
+            if (Array.isArray(data.results)) {
+              rowsHtml = `
+                <table class="table table-bordered table-sm mt-3">
+                  <thead>
+                    <tr>
+                      <th>Row</th>
+                      <th>Input</th>
+                      <th>Status</th>
+                      <th>Output / Error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${data.results.map(r => `
+                      <tr>
+                        <td>${r.row}</td>
+                        <td>${r.input}</td>
+                        <td>${r.status === "success" ? "✅" : "❌"}</td>
+                        <td style="max-width: 400px; white-space: pre-line;">${r.status === "success" ? r.output : ("<b>Error:</b> " + r.error)}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              `;
+            }
             resDiv.innerHTML = `
               <div class="alert alert-success">
                 ✅ Completed! Processed <strong>${data.total}</strong> rows:<br>
                 • ${data.successes} succeeded<br>
                 • ${data.failures} failed
               </div>
+              ${rowsHtml}
             `;
           } else {
             resDiv.innerHTML = `
