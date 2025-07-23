@@ -105,11 +105,9 @@
     function unlock() {
       document.getElementById('password-container').style.display = 'none';
       document.getElementById('main-content').style.display = '';
-      // store in session so user won't be asked again until they close tab
       sessionStorage.setItem("rfp_pw", PASSWORD);
     }
 
-    // On page load: check session
     window.onload = function() {
       if (sessionStorage.getItem("rfp_pw") === PASSWORD) {
         unlock();
@@ -199,15 +197,22 @@
             `;
           } else {
             resDiv.innerHTML = `
-              <div class="alert alert-danger">
-                ❌ Error: ${data.error || JSON.stringify(data)}
+              <div class="alert alert-danger d-flex flex-column align-items-center" style="font-size: 1.15rem;">
+                <img src="/static/pepesadviolin.gif" alt="Sad Pepe" style="width: 88px; margin-bottom: 10px;" />
+                <b>Oh no! Something went wrong.</b><br>
+                Please contact <b>Hugo Winzer</b> via Slack and share this screenshot.<br>
+                <div class="mt-2"><code>${data.error || JSON.stringify(data)}</code></div>
               </div>
             `;
           }
         } catch (err) {
+          const resDiv = document.getElementById("result");
           resDiv.innerHTML = `
-            <div class="alert alert-danger">
-              ❌ Network error: ${err.message}
+            <div class="alert alert-danger d-flex flex-column align-items-center" style="font-size: 1.15rem;">
+              <img src="/static/pepesadviolin.gif" alt="Sad Pepe" style="width: 88px; margin-bottom: 10px;" />
+              <b>Network error!</b><br>
+              Please contact <b>Hugo Winzer</b> via Slack and share this screenshot.<br>
+              <div class="mt-2"><code>${err.message}</code></div>
             </div>
           `;
         }
