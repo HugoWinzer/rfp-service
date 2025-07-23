@@ -13,7 +13,7 @@ openai.api_key = os.environ["OPENAI_API_KEY"]
 
 # ——— Load FAISS index + document store at startup ———
 with open("faiss_index/index.pkl", "rb") as f:
-    documents = pickle.load(f)  # list[str] or similar
+    documents = pickle.load(f)
 
 faiss_index = faiss.read_index("faiss_index/index.faiss")
 
@@ -22,15 +22,13 @@ creds, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/spreadsh
 sheets_service = build("sheets", "v4", credentials=creds)
 
 def get_column_letter(n: int) -> str:
-    """Convert 1-based index to Excel column letter."""
     letter = ""
     while n > 0:
         n, rem = divmod(n - 1, 26)
         letter = chr(65 + rem) + letter
     return letter
 
-def enrich_and_generate(user_input: str) -> str:
-    """Retrieve top-5 contexts via FAISS and call ChatCompletion."""
+def enrich_and_generate(user_input: str, previous_answers: list) -> str:
     # 1) Embed the user input
     embed_resp = openai.Embedding.create(
         model="text-embedding-ada-002",
@@ -43,22 +41,31 @@ def enrich_and_generate(user_input: str) -> str:
     contexts = [documents[i] for i in indices[0] if i < len(documents)]
     context_block = "\n---\n".join(contexts)
 
-    # 3) Call ChatCompletion with retrieval context
+    # 3) Previous answers block (limit to last 3 for token safety)
+    prev_block = ""
+    if previous_answers:
+        prev_block = "\n\nPrevious answers (do NOT copy, avoid repeating):\n" + \
+            "\n---\n".join(previous_answers[-3:])
+
+    # 4) Improved system prompt
     system_prompt = (
-        "You are an expert at writing responses for RFPs (Request for Proposals) for Fever, the leading ticketing and event platform. "
-        "Take the following context and create a proposal-ready, detailed, storytelling-rich answer based on the user requirement. "
-        "Make it engaging, professional, and tailored for business stakeholders. "
-        "Highlight Fever's strengths and the value delivered. Avoid repeating the context verbatim; synthesize and elaborate."
+        "You are an expert at writing responses for RFPs (Request for Proposals) for Fever, a ticketing and event platform. "
+        "Your job is to answer requirements in a professional, factual, and concise way, avoiding excessive praise, exaggeration, or repetitive structure. "
+        "Vary your phrasing and focus on clarity and specific value. "
+        "Do not copy or repeat the same structure as earlier responses in this session."
         "\n\nContext:\n"
         f"{context_block}"
+        f"{prev_block}"
     )
+
     chat = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_input},
         ],
-        temperature=0.7,
+        temperature=0.5,
+        max_tokens=512,
     )
     return chat.choices[0].message.content.strip()
 
@@ -102,19 +109,19 @@ def start_handler():
     ).execute()
     inputs = rows_resp.get("values", [])
 
-    # 3) Process each row in parallel
-    def worker(args):
-        (row_vals, row_num) = args
-        user_text = row_vals[0] if row_vals else ""
+    # 3) Process each row in sequence (so GPT sees previous answers)
+    results = []
+    previous_outputs = []
+    for i, row in enumerate(inputs):
+        row_num = i + 2
+        user_text = row[0] if row else ""
         try:
-            out = enrich_and_generate(user_text)
-            return {"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""}
+            out = enrich_and_generate(user_text, previous_outputs)
+            results.append({"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""})
+            previous_outputs.append(out)
         except Exception as e:
-            return {"row": row_num, "input": user_text, "output": "", "status": "fail", "error": str(e)}
-
-    tasks = [ (inputs[i], i + 2) for i in range(len(inputs)) ]
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        results = list(ex.map(worker, tasks))
+            results.append({"row": row_num, "input": user_text, "output": "", "status": "fail", "error": str(e)})
+            previous_outputs.append("")
 
     # 4) Batch-update all outputs back into the sheet
     data = []
