@@ -79,75 +79,82 @@ def health():
 
 @app.route("/start", methods=["POST"])
 def start_handler():
-    data = flask.request.get_json()
-    sheet_id = data.get("sheet_id")
-    if not sheet_id:
-        return flask.jsonify({"error": "Missing sheet_id"}), 400
+    try:
+        data = flask.request.get_json()
+        sheet_id = data.get("sheet_id")
+        if not sheet_id:
+            return flask.jsonify({"error": "Missing sheet_id"}), 400
 
-    # 1) Read header row to find (or create) “GPT Output” column
-    hdr = sheets_service.spreadsheets().values().get(
-        spreadsheetId=sheet_id,
-        range="'Sheet1'!1:1"
-    ).execute().get("values", [[]])[0]
-
-    if "GPT Output" not in hdr:
-        hdr.append("GPT Output")
-        sheets_service.spreadsheets().values().update(
+        # 1) Read header row to find (or create) “GPT Output” column
+        hdr = sheets_service.spreadsheets().values().get(
             spreadsheetId=sheet_id,
-            range="'Sheet1'!1:1",
-            valueInputOption="RAW",
-            body={"values": [hdr]}
+            range="'Sheet1'!1:1"
+        ).execute().get("values", [[]])[0]
+
+        if "GPT Output" not in hdr:
+            hdr.append("GPT Output")
+            sheets_service.spreadsheets().values().update(
+                spreadsheetId=sheet_id,
+                range="'Sheet1'!1:1",
+                valueInputOption="RAW",
+                body={"values": [hdr]}
+            ).execute()
+
+        output_col_idx = hdr.index("GPT Output") + 1  # 1-based
+        col_letter = get_column_letter(output_col_idx)
+
+        # 2) Fetch all data rows (starting from row 2)
+        rows_resp = sheets_service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range="'Sheet1'!A2:A"
+        ).execute()
+        inputs = rows_resp.get("values", [])
+
+        # 3) Process each row in sequence (so GPT sees previous answers)
+        results = []
+        previous_outputs = []
+        for i, row in enumerate(inputs):
+            row_num = i + 2
+            user_text = row[0] if row else ""
+            try:
+                out = enrich_and_generate(user_text, previous_outputs)
+                results.append({"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""})
+                previous_outputs.append(out)
+            except Exception as e:
+                results.append({"row": row_num, "input": user_text, "output": "", "status": "fail", "error": str(e)})
+                previous_outputs.append("")
+
+        # 4) Batch-update all outputs back into the sheet
+        data = []
+        for result in results:
+            data.append({
+                "range": f"Sheet1!{col_letter}{result['row']}",
+                "majorDimension": "ROWS",
+                "values": [[result["output"]]]
+            })
+
+        sheets_service.spreadsheets().values().batchUpdate(
+            spreadsheetId=sheet_id,
+            body={
+                "valueInputOption": "RAW",
+                "data": data
+            }
         ).execute()
 
-    output_col_idx = hdr.index("GPT Output") + 1  # 1-based
-    col_letter = get_column_letter(output_col_idx)
-
-    # 2) Fetch all data rows (starting from row 2)
-    rows_resp = sheets_service.spreadsheets().values().get(
-        spreadsheetId=sheet_id,
-        range="'Sheet1'!A2:A"
-    ).execute()
-    inputs = rows_resp.get("values", [])
-
-    # 3) Process each row in sequence (so GPT sees previous answers)
-    results = []
-    previous_outputs = []
-    for i, row in enumerate(inputs):
-        row_num = i + 2
-        user_text = row[0] if row else ""
-        try:
-            out = enrich_and_generate(user_text, previous_outputs)
-            results.append({"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""})
-            previous_outputs.append(out)
-        except Exception as e:
-            results.append({"row": row_num, "input": user_text, "output": "", "status": "fail", "error": str(e)})
-            previous_outputs.append("")
-
-    # 4) Batch-update all outputs back into the sheet
-    data = []
-    for result in results:
-        data.append({
-            "range": f"Sheet1!{col_letter}{result['row']}",
-            "majorDimension": "ROWS",
-            "values": [[result["output"]]]
+        success_count = sum(1 for r in results if r["status"] == "success")
+        fail_count    = len(results) - success_count
+        return flask.jsonify({
+            "total": len(results),
+            "successes": success_count,
+            "failures": fail_count,
+            "results": results  # detailed per-row log!
         })
-
-    sheets_service.spreadsheets().values().batchUpdate(
-        spreadsheetId=sheet_id,
-        body={
-            "valueInputOption": "RAW",
-            "data": data
-        }
-    ).execute()
-
-    success_count = sum(1 for r in results if r["status"] == "success")
-    fail_count    = len(results) - success_count
-    return flask.jsonify({
-        "total": len(results),
-        "successes": success_count,
-        "failures": fail_count,
-        "results": results  # detailed per-row log!
-    })
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print("----- UNCAUGHT ERROR IN /start -----")
+        print(tb)
+        return flask.jsonify({"error": f"Internal server error: {str(e)}", "traceback": tb}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
