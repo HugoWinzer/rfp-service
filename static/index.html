@@ -38,6 +38,15 @@
       box-shadow: 0 2px 8px #0001;
       text-align: center;
     }
+    pre {
+      background: #f8f8f8;
+      color: #222;
+      padding: 8px;
+      font-size: 0.9rem;
+      border-radius: 6px;
+      max-width: 100%;
+      overflow-x: auto;
+    }
   </style>
 </head>
 <body class="p-4">
@@ -179,7 +188,7 @@
                       <tr>
                         <td>${r.row}</td>
                         <td>${r.input}</td>
-                        <td>${r.status === "success" ? "✅" : "❌"}</td>
+                        <td>${r.status === "success" ? "✅" : (r.status === "skipped" ? "⏭️" : "❌")}</td>
                         <td style="max-width: 400px; white-space: pre-line;">${r.status === "success" ? r.output : ("<b>Error:</b> " + r.error)}</td>
                       </tr>
                     `).join("")}
@@ -196,12 +205,14 @@
               ${rowsHtml}
             `;
           } else {
+            let extraError = (data.fatal_error ? `<div style="max-width:650px;overflow-x:auto;font-size:90%;background:#fff4f4;padding:8px;margin-top:10px"><b>Backend error:</b><pre>${data.fatal_error}</pre></div>` : "");
             resDiv.innerHTML = `
               <div class="alert alert-danger d-flex flex-column align-items-center" style="font-size: 1.15rem;">
                 <img src="/static/pepesadviolin.gif" alt="Sad Pepe" style="width: 88px; margin-bottom: 10px;" />
                 <b>Oh no! Something went wrong.</b><br>
                 Please contact <b>Hugo Winzer</b> via Slack and share this screenshot.<br>
-                <div class="mt-2"><code>${data.error || JSON.stringify(data)}</code></div>
+                <div class="mt-2"><code>${data.error || JSON.stringify(data) || ""}</code></div>
+                ${extraError}
               </div>
             `;
           }
