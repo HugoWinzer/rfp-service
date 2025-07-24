@@ -6,6 +6,7 @@ import openai
 import flask
 from googleapiclient.discovery import build
 import google.auth
+import time
 
 app = flask.Flask(__name__)
 openai.api_key = os.environ["OPENAI_API_KEY"]
@@ -72,6 +73,7 @@ def enrich_and_generate(user_input: str, previous_answers: list) -> str:
         ],
         temperature=0.5,
         max_tokens=512,
+        request_timeout=60,
     )
     return chat.choices[0].message.content.strip()
 
@@ -111,19 +113,31 @@ def start_handler():
         col_letter = get_column_letter(output_col_idx)
 
         # 2) Fetch all data rows (starting from row 2)
-        rows_resp = sheets_service.spreadsheets().values().get(
+        rows_req = sheets_service.spreadsheets().values().get(
             spreadsheetId=sheet_id,
             range="'Sheet1'!A2:A"
         ).execute()
-        inputs = rows_resp.get("values", [])
+        inputs = rows_req.get("values", [])
 
-        # 3) Process and update each row immediately, and collect errors
+        # 3) Fetch GPT Output column to know which rows are already done!
+        rows_out = sheets_service.spreadsheets().values().get(
+            spreadsheetId=sheet_id,
+            range=f"'Sheet1'!{col_letter}2:{col_letter}"
+        ).execute()
+        outputs = rows_out.get("values", [])
+
+        # 4) Process and update each row immediately, but skip those with output
         results = []
         previous_outputs = []
-        for i, row in enumerate(inputs):
+        max_rows = max(len(inputs), len(outputs))
+
+        for i in range(max_rows):
             row_num = i + 2
-            user_text = row[0] if row else ""
+            user_text = inputs[i][0] if i < len(inputs) and inputs[i] else ""
+            existing_output = outputs[i][0] if i < len(outputs) and outputs[i] else ""
+
             if not user_text or not user_text.strip():
+                # Skip and clear output if input is empty
                 sheets_service.spreadsheets().values().update(
                     spreadsheetId=sheet_id,
                     range=f"Sheet1!{col_letter}{row_num}",
@@ -132,6 +146,11 @@ def start_handler():
                 ).execute()
                 results.append({"row": row_num, "input": user_text, "output": "", "status": "skipped", "error": "Empty input"})
                 previous_outputs.append("")
+                continue
+            if existing_output and existing_output.strip() and not existing_output.strip().startswith("ERROR:"):
+                # Already filled cell, skip!
+                results.append({"row": row_num, "input": user_text, "output": existing_output, "status": "skipped", "error": "Already answered"})
+                previous_outputs.append(existing_output)
                 continue
             try:
                 out = enrich_and_generate(user_text, previous_outputs)
@@ -143,6 +162,7 @@ def start_handler():
                 ).execute()
                 results.append({"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""})
                 previous_outputs.append(out)
+                time.sleep(3)  # Delay to respect OpenAI rate limits!
             except Exception as e:
                 import traceback
                 tb = traceback.format_exc()
