@@ -4,17 +4,8 @@ import numpy as np
 import faiss
 import openai
 import flask
-from concurrent.futures import ThreadPoolExecutor
 from googleapiclient.discovery import build
 import google.auth
-import sys
-import traceback
-
-def log_all_exceptions(type, value, tb):
-    print("GLOBAL UNCAUGHT EXCEPTION:")
-    traceback.print_exception(type, value, tb)
-sys.excepthook = log_all_exceptions
-
 
 app = flask.Flask(__name__)
 openai.api_key = os.environ["OPENAI_API_KEY"]
@@ -118,7 +109,7 @@ def start_handler():
         ).execute()
         inputs = rows_resp.get("values", [])
 
-        # 3) Process each row in sequence (so GPT sees previous answers)
+        # 3) Process and update each row immediately
         results = []
         previous_outputs = []
         for i, row in enumerate(inputs):
@@ -126,28 +117,25 @@ def start_handler():
             user_text = row[0] if row else ""
             try:
                 out = enrich_and_generate(user_text, previous_outputs)
+                # Write result back immediately!
+                sheets_service.spreadsheets().values().update(
+                    spreadsheetId=sheet_id,
+                    range=f"Sheet1!{col_letter}{row_num}",
+                    valueInputOption="RAW",
+                    body={"values": [[out]]}
+                ).execute()
                 results.append({"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""})
                 previous_outputs.append(out)
             except Exception as e:
-                results.append({"row": row_num, "input": user_text, "output": "", "status": "fail", "error": str(e)})
+                error_msg = str(e)
+                sheets_service.spreadsheets().values().update(
+                    spreadsheetId=sheet_id,
+                    range=f"Sheet1!{col_letter}{row_num}",
+                    valueInputOption="RAW",
+                    body={"values": [[f"ERROR: {error_msg}"]]}
+                ).execute()
+                results.append({"row": row_num, "input": user_text, "output": "", "status": "fail", "error": error_msg})
                 previous_outputs.append("")
-
-        # 4) Batch-update all outputs back into the sheet
-        data = []
-        for result in results:
-            data.append({
-                "range": f"Sheet1!{col_letter}{result['row']}",
-                "majorDimension": "ROWS",
-                "values": [[result["output"]]]
-            })
-
-        sheets_service.spreadsheets().values().batchUpdate(
-            spreadsheetId=sheet_id,
-            body={
-                "valueInputOption": "RAW",
-                "data": data
-            }
-        ).execute()
 
         success_count = sum(1 for r in results if r["status"] == "success")
         fail_count    = len(results) - success_count
