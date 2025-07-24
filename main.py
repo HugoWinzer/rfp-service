@@ -48,14 +48,22 @@ def enrich_and_generate(user_input: str, previous_answers: list) -> str:
 
     # 4) Improved system prompt
     system_prompt = (
-        "You are an expert at writing responses for RFPs (Request for Proposals) for Fever, a ticketing and event platform. "
-        "Your job is to answer requirements in a professional, factual, and concise way, avoiding excessive praise, exaggeration, or repetitive structure. "
-        "Vary your phrasing and focus on clarity and specific value. "
-        "Do not copy or repeat the same structure as earlier responses in this session."
-        "\n\nContext:\n"
+        "You are answering as if you are Fever, the leading ticketing and event platform, speaking in first person as a business representative. "
+        "Start each answer uniquely—do NOT repeat the same opening in every response. "
+        "For each requirement, read both the requirement and Arphie's draft answer. "
+        "Expand and enrich the answer with all relevant, proposal-winning detail: if you can add value, context, or clarification beyond what Arphie said, do it. "
+        "Don't just rephrase, add information that may help the client understand our value."
+        "Write as much as needed, even much more than the input text, if it's helpful or persuasive—never limit yourself by the input length. "
+        "Keep the tone professional, not exaggerated or over-promising, and always write in first person (our solution, we provide, etc.). "
+        "Avoid generic or repetitive introductions and focus on the specific business case for each requirement."
+        "\n\nContext (information for you):\n"
         f"{context_block}"
-        f"{prev_block}"
+        "\n\nRequirement (the client request):\n"
+        f"{user_input}"
+        "\n\nDraft answer from Arphie (our team's suggestion):\n"
+        f"{previous_answers[-1] if previous_answers else ''}"
     )
+
 
     chat = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
