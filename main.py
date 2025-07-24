@@ -7,6 +7,14 @@ import flask
 from concurrent.futures import ThreadPoolExecutor
 from googleapiclient.discovery import build
 import google.auth
+import sys
+import traceback
+
+def log_all_exceptions(type, value, tb):
+    print("GLOBAL UNCAUGHT EXCEPTION:")
+    traceback.print_exception(type, value, tb)
+sys.excepthook = log_all_exceptions
+
 
 app = flask.Flask(__name__)
 openai.api_key = os.environ["OPENAI_API_KEY"]
