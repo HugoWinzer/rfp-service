@@ -46,7 +46,7 @@ def enrich_and_generate(user_input: str, previous_answers: list) -> str:
         prev_block = "\n\nPrevious answers (do NOT copy, avoid repeating):\n" + \
             "\n---\n".join(previous_answers[-3:])
 
-    # 4) Improved system prompt
+    # 4) Improved system prompt (as you requested!)
     system_prompt = (
         "You are answering as if you are Fever, the leading ticketing and event platform, speaking in first person as a business representative. "
         "Start each answer uniquely—do NOT repeat the same opening in every response. "
@@ -63,7 +63,6 @@ def enrich_and_generate(user_input: str, previous_answers: list) -> str:
         "\n\nDraft answer from Arphie (our team's suggestion):\n"
         f"{previous_answers[-1] if previous_answers else ''}"
     )
-
 
     chat = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
@@ -86,6 +85,7 @@ def health():
 
 @app.route("/start", methods=["POST"])
 def start_handler():
+    error_trace = ""  # Track any fatal error for UI debug
     try:
         data = flask.request.get_json()
         sheet_id = data.get("sheet_id")
@@ -117,14 +117,13 @@ def start_handler():
         ).execute()
         inputs = rows_resp.get("values", [])
 
-        # 3) Process and update each row immediately
+        # 3) Process and update each row immediately, and collect errors
         results = []
         previous_outputs = []
         for i, row in enumerate(inputs):
             row_num = i + 2
             user_text = row[0] if row else ""
             if not user_text or not user_text.strip():
-                # Skip and clear output if input is empty
                 sheets_service.spreadsheets().values().update(
                     spreadsheetId=sheet_id,
                     range=f"Sheet1!{col_letter}{row_num}",
@@ -136,7 +135,6 @@ def start_handler():
                 continue
             try:
                 out = enrich_and_generate(user_text, previous_outputs)
-                # Write result back immediately!
                 sheets_service.spreadsheets().values().update(
                     spreadsheetId=sheet_id,
                     range=f"Sheet1!{col_letter}{row_num}",
@@ -146,7 +144,9 @@ def start_handler():
                 results.append({"row": row_num, "input": user_text, "output": out, "status": "success", "error": ""})
                 previous_outputs.append(out)
             except Exception as e:
-                error_msg = str(e)
+                import traceback
+                tb = traceback.format_exc()
+                error_msg = f"{type(e).__name__}: {e}\n{tb}"
                 sheets_service.spreadsheets().values().update(
                     spreadsheetId=sheet_id,
                     range=f"Sheet1!{col_letter}{row_num}",
@@ -155,14 +155,24 @@ def start_handler():
                 ).execute()
                 results.append({"row": row_num, "input": user_text, "output": "", "status": "fail", "error": error_msg})
                 previous_outputs.append("")
+                error_trace += f"\nRow {row_num}: {error_msg}\n"
 
         success_count = sum(1 for r in results if r["status"] == "success")
         fail_count    = len(results) - success_count
+        # If any error happened, show in the UI
+        if error_trace:
+            return flask.jsonify({
+                "total": len(results),
+                "successes": success_count,
+                "failures": fail_count,
+                "results": results,
+                "fatal_error": error_trace
+            }), 500
         return flask.jsonify({
             "total": len(results),
             "successes": success_count,
             "failures": fail_count,
-            "results": results  # detailed per-row log!
+            "results": results
         })
     except Exception as e:
         import traceback
