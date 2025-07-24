@@ -115,6 +115,17 @@ def start_handler():
         for i, row in enumerate(inputs):
             row_num = i + 2
             user_text = row[0] if row else ""
+            if not user_text or not user_text.strip():
+                # Skip and clear output if input is empty
+                sheets_service.spreadsheets().values().update(
+                    spreadsheetId=sheet_id,
+                    range=f"Sheet1!{col_letter}{row_num}",
+                    valueInputOption="RAW",
+                    body={"values": [[""]]}
+                ).execute()
+                results.append({"row": row_num, "input": user_text, "output": "", "status": "skipped", "error": "Empty input"})
+                previous_outputs.append("")
+                continue
             try:
                 out = enrich_and_generate(user_text, previous_outputs)
                 # Write result back immediately!
